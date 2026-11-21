@@ -1,6 +1,9 @@
 
+
+
 import os
 import requests
+import time
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -49,18 +52,8 @@ if not record or not record.get("text"):
 
 arabic = record["text"]
 
-
-
-# 3. Groq orqali o'zbekchaga tarjima
-if translation_response.status_code == 429:
-    print("GROQ 429 XATOSI:")
-    print(translation_response.text)
-    print("Retry-After:", translation_response.headers.get("retry-after"))
-    print("Qolgan tokenlar:", translation_response.headers.get("x-ratelimit-remaining-tokens"))
-    print("Qolgan so'rovlar:", translation_response.headers.get("x-ratelimit-remaining-requests"))
-    raise ValueError("Groq limiti tugagan yoki vaqtincha cheklov qo'yilgan")
-
-translation_response.raise_for_status()
+# 3. Groq orqali tarjima
+translation_response = requests.post(
     "https://api.groq.com/openai/v1/chat/completions",
     headers={
         "Authorization": f"Bearer {GROQ_KEY}",
@@ -75,32 +68,17 @@ translation_response.raise_for_status()
                 "content": (
                     "Сен араб тилидан ўзбек тилига таржима қилувчи "
                     "тажрибали исломий матнлар таржимонисан. "
-                    "Қуйидаги қоидаларга қатъий амал қил:\n"
-                    "1. Матнни фақат ўзбек кириллида таржима қил.\n"
-                    "2. Арабча матннинг барча қисмларини, "
-                    "санад ва ровийларни ҳам тўлиқ таржима қил.\n"
-                    "3. Ровийларнинг исмларини аниқ ва бир хил "
-                    "ёз: Муҳаммад ибн ал-Мусанно, "
-                    "аз-Заҳҳок ибн Махлад, Абдурраҳмон ибн Вардан, "
-                    "Абу Салама ибн Абдурраҳмон, Ҳумрон, "
-                    "Усмон ибн Аффон.\n"
-                    "4. Ҳадис атамаларини ўзбекча исломий "
-                    "истилоҳларга мувофиқ ишлат. Масалан: "
-                    "таҳорат, масҳ тортиш, оғизни чайиш, "
-                    "бурунга сув олиш.\n"
-                    "5. Арабча матнда йўқ бўлган гап ёки "
-                    "изоҳни қўшма.\n"
-                    "6. Ҳеч бир жумла ёки маънони тушириб қолдирма.\n"
-                    "7. Ровийларнинг гапларини Расулуллоҳ "
-                    "соллаллоҳу алайҳи васалламнинг сўзлари "
-                    "билан аралаштирма.\n"
-                    "8. Ўзбек тилида равон, адабий ва грамматик "
-                    "жиҳатдан тўғри ёз.\n"
-                    "9. Русча, инглизча ёки лотин ёзувидаги "
-                    "сўзларни ишлатма.\n"
-                    "10. Арабча матнни такрорлама, сарлавҳа "
-                    "ёки ўз изоҳингни қўшма.\n"
-                    "Фақат тўлиқ ўзбекча таржимани қайтар."
+                    "Матнни фақат ўзбек кириллида тўлиқ таржима қил. "
+                    "Санад ва барча ровийларни ҳам таржима қил. "
+                    "Ровийларнинг гапларини Расулуллоҳ "
+                    "соллаллоҳу алайҳи васалламнинг сўзлари билан "
+                    "аралаштирма. "
+                    "Ҳадис атамаларини тўғри ишлат: таҳорат, "
+                    "масҳ тортиш, оғизни чайиш, бурунга сув олиш. "
+                    "Ҳеч бир маънони туширма ва арабча матнда "
+                    "бўлмаган маълумотни қўшма. "
+                    "Равон ва адабий ўзбек тилида ёз. "
+                    "Фақат таржимани қайтар."
                 )
             },
             {
@@ -114,6 +92,13 @@ translation_response.raise_for_status()
     timeout=90
 )
 
+# 4. Groq xatosini tekshirish
+if translation_response.status_code == 429:
+    print("GROQ 429 XATOSI:")
+    print(translation_response.text)
+    print("Retry-After:", translation_response.headers.get("retry-after"))
+    raise ValueError("Groq so'rov limiti vaqtincha tugagan")
+
 translation_response.raise_for_status()
 
 translation_data = translation_response.json()
@@ -123,14 +108,9 @@ translation = (
 ).strip()
 
 if not translation or len(translation) < 50:
-    raise ValueError(
-        "Tarjima noto'g'ri yoki bo'sh qaytdi: " + repr(translation)
-    )
-    
-    
+    raise ValueError("Tarjima noto'g'ri yoki bo'sh qaytdi")
 
-
-# 4. Telegramga yuborish
+# 5. Telegramga yuborish
 message = (
     "📖 СУНАН АБУ ДОВУД\n"
     "Ҳадис № 107\n\n"
@@ -151,4 +131,3 @@ telegram_response = requests.post(
 telegram_response.raise_for_status()
 
 print("Hadis muvaffaqiyatli yuborildi!")
-
