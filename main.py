@@ -49,6 +49,8 @@ if not record or not record.get("text"):
 
 arabic = record["text"]
 
+
+# 3. Groq orqali o'zbekchaga tarjima
 translation_response = requests.post(
     "https://api.groq.com/openai/v1/chat/completions",
     headers={
@@ -56,35 +58,51 @@ translation_response = requests.post(
         "Content-Type": "application/json"
     },
     json={
-        "model": "openai/gpt-oss-20b",
+        "model": "qwen/qwen3.8-27b",
+        "reasoning_effort": "none",
         "messages": [
             {
-                "role": "user",
+                "role": "system",
                 "content": (
-                    "Quyidagi arabcha hadisni o'zbek tiliga "
-                    "kirill yozuvida to'liq tarjima qil. "
-                    "Hech qanday izoh qo'shma. "
-                    "Faqat tarjimani yoz:\n\n" + arabic
+                    "Сен араб тилидан ўзбек тилига таржима қилувчи "
+                    "мутахассис таржимонсан. "
+                    "Арабча ҳадисни ўзбек кириллицасида тўлиқ, "
+                    "аниқ ва равон таржима қил. "
+                    "Ҳадиснинг бирор қисмини тушириб қолдирма. "
+                    "Санад ва ровийларни ҳам таржима қил. "
+                    "Арабча матнни такрорлама. "
+                    "Топшириқни такрорлама. "
+                    "Фақат таржимани бер."
                 )
+            },
+            {
+                "role": "user",
+                "content": "Қуйидаги ҳадисни таржима қил:\n\n" + arabic
             }
         ],
-        "reasoning_effort": "low",
-        "include_reasoning": False,
-        "temperature": 0.2,
-        "max_completion_tokens": 2048
+        "max_completion_tokens": 2048,
+        "temperature": 0.2
     },
-    timeout=60
+    timeout=90
 )
 
 translation_response.raise_for_status()
 
+translation_data = translation_response.json()
+
 translation = (
-    translation_response.json()["choices"][0]
-    ["message"]["content"] or ""
+    translation_data["choices"][0]["message"]["content"] or ""
 ).strip()
 
-if not translation:
-    raise ValueError("Groq tarjimani bo'sh qaytardi!")
+if (
+    not translation
+    or "Ҳадисни тўлиқ таржима қилинг" in translation
+    or len(translation) < 50
+):
+    raise ValueError(
+        "Tarjima noto'g'ri yoki bo'sh qaytdi: " + repr(translation)
+    )
+    
 
 
 # 4. Telegramga yuborish
