@@ -52,7 +52,15 @@ arabic = record["text"]
 
 
 # 3. Groq orqali o'zbekchaga tarjima
-translation_response = requests.post(
+if translation_response.status_code == 429:
+    print("GROQ 429 XATOSI:")
+    print(translation_response.text)
+    print("Retry-After:", translation_response.headers.get("retry-after"))
+    print("Qolgan tokenlar:", translation_response.headers.get("x-ratelimit-remaining-tokens"))
+    print("Qolgan so'rovlar:", translation_response.headers.get("x-ratelimit-remaining-requests"))
+    raise ValueError("Groq limiti tugagan yoki vaqtincha cheklov qo'yilgan")
+
+translation_response.raise_for_status()
     "https://api.groq.com/openai/v1/chat/completions",
     headers={
         "Authorization": f"Bearer {GROQ_KEY}",
