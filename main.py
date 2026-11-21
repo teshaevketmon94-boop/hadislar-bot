@@ -1,9 +1,8 @@
 
-
-
 import os
+import json
 import requests
-import time
+import subprocess
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -12,15 +11,44 @@ GROQ_KEY = os.getenv("GROQ_API_KEY")
 if not TOKEN or not CHAT_ID or not GROQ_KEY:
     raise ValueError("Telegram yoki Groq sozlamalari topilmadi")
 
-# 1. Abu Dawud 107-hadisni olish
-urls = [
-    "https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-abudawud/107.min.json",
-    "https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-abudawud/107.json"
+# 1. Hadislar navbati
+books = [
+    ("ara-bukhari", "САҲИҲ АЛ-БУХОРИЙ"),
+    ("ara-muslim", "САҲИҲ МУСЛИМ"),
+    ("ara-abudawud", "СУНАН АБУ ДОВУД"),
+    ("ara-tirmidhi", "ЖОМЕЪ АТ-ТЕРМИЗИЙ"),
+    ("ara-nasai", "СУНАН АН-НАСОИЙ"),
+    ("ara-ibnmajah", "СУНАН ИБН МОЖА")
 ]
+
+# 2. Navbatni o'qish
+STATE_FILE = "state.json"
+
+if os.path.exists(STATE_FILE):
+    with open(STATE_FILE, "r", encoding="utf-8") as f:
+        state = json.load(f)
+else:
+    state = {"book_index": 0, "hadith_number": 107}
+
+book_index = state["book_index"]
+hadith_number = state["hadith_number"]
+
+if book_index < 0 or book_index >= len(books):
+    raise ValueError("Kitob navbati noto'g'ri")
+
+edition, book_name = books[book_index]
+
+print(f"Kitob: {book_name}, hadis: {hadith_number}")
+
+# 3. Hadisni manbadan olish
+base_url = (
+    f"https://cdn.jsdelivr.net/gh/fawazahmed0/"
+    f"hadith-api@1/editions/{edition}/{hadith_number}"
+)
 
 data = None
 
-for url in urls:
+for url in [base_url + ".min.json", base_url + ".json"]:
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
@@ -32,18 +60,22 @@ for url in urls:
 if data is None:
     raise ValueError("Hadis manbasidan ma'lumot olinmadi")
 
-# 2. Hadis matnini ajratib olish
+# 4. Hadis matnini ajratish
 record = None
 
 if isinstance(data, dict):
     if isinstance(data.get("hadith"), dict):
         record = data["hadith"]
+
     elif isinstance(data.get("hadiths"), list):
         record = next(
-            (h for h in data["hadiths"]
-             if str(h.get("hadithnumber")) == "107"),
+            (
+                h for h in data["hadiths"]
+                if str(h.get("hadithnumber")) == str(hadith_number)
+            ),
             None
         )
+
     elif "text" in data:
         record = data
 
@@ -52,7 +84,7 @@ if not record or not record.get("text"):
 
 arabic = record["text"]
 
-# 3. Groq orqali tarjima
+# 5. Groq orqali o'zbekchaga tarjima
 translation_response = requests.post(
     "https://api.groq.com/openai/v1/chat/completions",
     headers={
@@ -73,10 +105,9 @@ translation_response = requests.post(
                     "Ровийларнинг гапларини Расулуллоҳ "
                     "соллаллоҳу алайҳи васалламнинг сўзлари билан "
                     "аралаштирма. "
-                    "Ҳадис атамаларини тўғри ишлат: таҳорат, "
-                    "масҳ тортиш, оғизни чайиш, бурунга сув олиш. "
-                    "Ҳеч бир маънони туширма ва арабча матнда "
-                    "бўлмаган маълумотни қўшма. "
+                    "Ҳадис атамаларини тўғри ишлат. "
+                    "Ҳеч бир маънони туширма ва матнда йўқ "
+                    "маълумотни қўшма. "
                     "Равон ва адабий ўзбек тилида ёз. "
                     "Фақат таржимани қайтар."
                 )
@@ -92,12 +123,9 @@ translation_response = requests.post(
     timeout=90
 )
 
-# 4. Groq xatosini tekshirish
 if translation_response.status_code == 429:
-    print("GROQ 429 XATOSI:")
-    print(translation_response.text)
-    print("Retry-After:", translation_response.headers.get("retry-after"))
-    raise ValueError("Groq so'rov limiti vaqtincha tugagan")
+    print("GROQ 429 XATOSI:", translation_response.text)
+    raise ValueError("Groq limiti vaqtincha tugagan")
 
 translation_response.raise_for_status()
 
@@ -110,13 +138,13 @@ translation = (
 if not translation or len(translation) < 50:
     raise ValueError("Tarjima noto'g'ri yoki bo'sh qaytdi")
 
-# 5. Telegramga yuborish
+# 6. Telegramga yuborish
 message = (
-    "📖 СУНАН АБУ ДОВУД\n"
-    "Ҳадис № 107\n\n"
+    f"📖 {book_name}\n"
+    f"Ҳадис № {hadith_number}\n\n"
     f"{arabic}\n\n"
     f"🇺🇿 {translation}\n\n"
-    "Манба: Абу Довуд"
+    f"Манба: {book_name}"
 )
 
 telegram_response = requests.post(
@@ -130,4 +158,43 @@ telegram_response = requests.post(
 
 telegram_response.raise_for_status()
 
-print("Hadis muvaffaqiyatli yuborildi!")
+print("Hadis Telegramga yuborildi!")
+
+# 7. Keyingi kun uchun navbatni yangilash
+book_index += 1
+
+if book_index >= len(books):
+    book_index = 0
+    hadith_number += 1
+
+new_state = {
+    "book_index": book_index,
+    "hadith_number": hadith_number
+}
+
+with open(STATE_FILE, "w", encoding="utf-8") as f:
+    json.dump(new_state, f, ensure_ascii=False, indent=2)
+
+# 8. Navbatni GitHubda saqlash
+subprocess.run(
+    ["git", "config", "user.name", "github-actions[bot]"],
+    check=True
+)
+
+subprocess.run(
+    ["git", "config", "user.email",
+     "41898282+github-actions[bot]@users.noreply.github.com"],
+    check=True
+)
+
+subprocess.run(["git", "add", STATE_FILE], check=True)
+
+subprocess.run(
+    ["git", "commit", "-m", "Update hadith sequence"],
+    check=True
+)
+
+subprocess.run(["git", "push"], check=True)
+
+print("Keyingi hadis navbati saqlandi!")
+
