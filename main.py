@@ -50,6 +50,8 @@ if not record or not record.get("text"):
 arabic = record["text"]
 
 # 3. Groq orqali o'zbekchaga tarjima
+translation_response = 
+# 3. Groq orqali o'zbekchaga tarjima
 translation_response = requests.post(
     "https://api.groq.com/openai/v1/chat/completions",
     headers={
@@ -60,28 +62,33 @@ translation_response = requests.post(
         "model": "openai/gpt-oss-20b",
         "messages": [
             {
-                "role": "system",
-                "content": (
-                    "Sen arab tilidan o'zbek tiliga tarjimonisan. "
-                    "Hadisni o'zbek kirill yozuvida aniq va ravon tarjima qil. "
-                    "Izoh yoki yangi ma'lumot qo'shma. "
-                    "Faqat tarjimani qaytar."
-                )
-            },
-            {
                 "role": "user",
-                "content": arabic
+                "content": (
+                    "Quyidagi arabcha hadisni o'zbek tiliga "
+                    "kirill yozuvida to'liq tarjima qil. "
+                    "Hech qanday izoh qo'shma. "
+                    "Faqat tarjimani yoz:\n\n" + arabic
+                )
             }
         ],
+        "reasoning_effort": "low",
+        "include_reasoning": False,
         "temperature": 0.2,
-        "max_completion_tokens": 1200
+        "max_completion_tokens": 2048
     },
     timeout=60
 )
 
 translation_response.raise_for_status()
 
-translation = translation_response.json()["choices"][0]["message"]["content"].strip()
+translation = (
+    translation_response.json()["choices"][0]
+    ["message"]["content"] or ""
+).strip()
+
+if not translation:
+    raise ValueError("Groq tarjimani bo'sh qaytardi!")
+
 
 # 4. Telegramga yuborish
 message = (
