@@ -49,9 +49,6 @@ if not record or not record.get("text"):
 
 arabic = record["text"]
 
-# 3. Groq orqali o'zbekchaga tarjima
-translation_response = 
-# 3. Groq orqali o'zbekchaga tarjima
 translation_response = requests.post(
     "https://api.groq.com/openai/v1/chat/completions",
     headers={
