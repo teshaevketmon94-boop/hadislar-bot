@@ -1,3 +1,4 @@
+    
 
 name: Daily Hadith Bot
 
@@ -33,6 +34,6 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          QURAN_CHAT_ID: ${{ secrets.QURAN_CHAT_ID }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python main.py
-        
